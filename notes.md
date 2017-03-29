@@ -1,6 +1,8 @@
 Resources on ELF:
   - [Making teensy programs](http://www.muppetlabs.com/~breadbox/software/tiny/teensy.html)
     - goes down to 45 bytes
+  - [Undestanding ELF(https://medium.com/@MrJamesFisher/understanding-the-elf-4bd60daac571)
+    - Good high level overview / motivation explaner
   - [Overview of ELF and how to inspect it using tools](https://linux-audit.com/elf-binaries-on-linux-understanding-and-analysis/)
   - [Detailed overview of basic format](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format)
     - Missing 64 bit program section format
