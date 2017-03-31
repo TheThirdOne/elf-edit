@@ -3,15 +3,17 @@ extern crate pancurses;
 use std::fs::File;
 use std::io::Read;
 use pancurses::*;
+use std::env;
 use std::cmp;
 
 fn main() {
   let window = initscr();
   start_color();
   use_default_colors();
-
+  
   noecho();
 
+  window.keypad(true);
   init_pair(1, COLOR_BLACK, COLOR_YELLOW);
   init_pair(2, COLOR_WHITE, COLOR_GREEN);
   init_pair(3, COLOR_WHITE, COLOR_CYAN);
@@ -21,25 +23,31 @@ fn main() {
 	
   
   let mut buffer = Vec::new();
-  let size = File::open("foo.txt").unwrap().read_to_end(&mut buffer);
+  let size = File::open(env::args().nth(1).unwrap()).unwrap().read_to_end(&mut buffer);
   let mut info = get_elf_info(&buffer);
   
   let mut cursor = Cursor{index:0,length:buffer.len()*2+1,offset:0};
 
   loop {
-    cursor.update_offset((window.get_max_y()-2) as usize);
+    if cursor.update_offset((window.get_max_y()-2) as usize) {
+      window.clear();
+    }
     render(&window,&buffer,&info,&cursor);
-    
+
     window.refresh();
     match window.getch() {
       Some(Input::Character('j'))=>{cursor.mv(0,-1);},
+      Some(Input::KeyUp)         =>{cursor.mv(0,-1);},
       Some(Input::Character('k'))=>{cursor.mv(0,1);},
+      Some(Input::KeyDown)       =>{cursor.mv(0,1);},
       Some(Input::Character('h'))=>{cursor.mv(-1,0);},
+      Some(Input::KeyLeft)       =>{cursor.mv(-1,0);},
       Some(Input::Character('l'))=>{cursor.mv(1,0);},
+      Some(Input::KeyRight)      =>{cursor.mv(1,0);},
       Some(Input::Character(other)) if other >= '0' && other <= '9' => {buffer.set_at((other as u8) -('0' as u8),&mut cursor); info = get_elf_info(&buffer);},
       Some(Input::Character(other)) if other >= 'a' && other <= 'f' => {buffer.set_at((other as u8) -('a' as u8)+10,&mut cursor); info = get_elf_info(&buffer);},
       Some(Input::Character('\u{1b}')) => break,
-      Some(other)=>{window.mvaddstr(window.get_max_y()-1,0,&format!("Unused keypress: {:?}",other));},
+      Some(other)=>{info.msg = format!("Unused keypress: {:?}",other);},
       None => ()
     }
   }
@@ -94,17 +102,21 @@ impl Cursor {
   fn y(&self) -> usize {
     return self.index/32;
   }
-  fn update_offset(&mut self, height: usize){
+  fn update_offset(&mut self, height: usize) -> bool{
     if self.offset > self.y() || self.y() - self.offset > height{
-      self.offset = if self.y() < height/2 {
+      let offset = if self.y() < height/2 {
         0
       } else if self.length/32-self.y() < height/2 {
         if self.length/32 > height {self.length/32 - height} else {0}
       } else {
         self.y()-height/2
+      };
+      if offset != self.offset {
+        self.offset = offset;
+        return true;
       }
-      
     }
+    return false;
   }
 }
 
@@ -131,7 +143,7 @@ fn render(window: &Window, buffer: &Vec<u8>, table: &ELFinfo, cursor:&Cursor){
   window.mv((cursor.y()-cursor.offset) as i32,cursor.x() as i32);
 }
 
-fn get_elf_info<'a,'b>(buffer: &'a Vec<u8>) -> ELFinfo<'b> {
+fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
   let mut tmp = ELFinfo{bit_class:buffer[4],endianess:buffer[5],version:buffer[6],abi:buffer[7],
          file_type:get_multibyte_data(&buffer[16..18],buffer[5]==1) as u16,
               arch:get_multibyte_data(&buffer[18..20],buffer[5]==1) as u16,
@@ -146,22 +158,22 @@ fn get_elf_info<'a,'b>(buffer: &'a Vec<u8>) -> ELFinfo<'b> {
               sect_num:get_multibyte_data(&buffer[60..62],buffer[5]==1) as u16,
               shs_table_index:get_multibyte_data(&buffer[62..64],buffer[5]==1) as u16,
               progs:Vec::new(),sects:Vec::new(),shst:STRTAB{offset:0,size:0},
-              msg:""
+              msg:"".to_owned()
   };
   if tmp.prog_head == 0 && tmp.prog_num != 0 {
-    tmp.msg = "Program headers offset = 0, but there are program headers";
+    tmp.msg = "Program headers offset = 0, but there are program headers".to_owned();
     return tmp;
   }
   if tmp.sect_head == 0 && tmp.sect_num != 0 {
-    tmp.msg = "Section headers offset = 0, but there are program headers";
+    tmp.msg = "Section headers offset = 0, but there are program headers".to_owned();
     return tmp;
   }
   if tmp.prog_head > buffer.len() as u64 || tmp.prog_head + (tmp.prog_size as u64)*(tmp.prog_num as u64) > buffer.len() as u64{
-    tmp.msg = "Error parsing. Program header outside file.";
+    tmp.msg = "Error parsing. Program header outside file.".to_owned();
     return tmp;
   }
   if tmp.sect_head > buffer.len() as u64 || tmp.sect_head + (tmp.sect_size as u64)*(tmp.sect_num as u64) > buffer.len() as u64{
-    tmp.msg = "Error parsing. Section header outside file.";
+    tmp.msg = "Error parsing. Section header outside file.".to_owned();
     return tmp;
   }
   for i in 0..tmp.prog_num {
@@ -193,12 +205,12 @@ fn get_elf_info<'a,'b>(buffer: &'a Vec<u8>) -> ELFinfo<'b> {
     let shs_head = &tmp.sects[tmp.shs_table_index as usize];
     if shs_head.typ == 3 {
       if shs_head.offset > buffer.len() as u64 || shs_head.offset + shs_head.file_size > buffer.len() as u64 {
-        tmp.msg = "String table section not within file";
+        tmp.msg = "String table section not within file".to_owned();
       }
       tmp.shst.offset = shs_head.offset;
       tmp.shst.size = shs_head.file_size;
     } else {
-      tmp.msg = "String table section header corrupted";
+      tmp.msg = "String table section header corrupted".to_owned();
     }
   }
   return tmp;
@@ -233,7 +245,7 @@ fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32
     window.attrset(ColorPair(0));
     window.printw(" ");
     window.attrset(ColorPair(5));
-    window.printw(match info.abi { 0 => "System V", 3 => "Linux", _ => "Unkown ABI"});
+    window.printw(match info.abi { 0 => "System V", 3 => "Linux", _ => "Unknown ABI"});
     window.attrset(ColorPair(6));
   }
   if offset <= 1 {
@@ -251,7 +263,7 @@ fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32
     window.attrset(ColorPair(5));
   }
   if offset <= 2 {
-    window.mvaddstr(2-offset,60,&format!("&progs: Ox{:08X}",info.prog_head));
+    window.mvaddstr(2-offset,60,&format!("&progs: 0x{:08X}",info.prog_head));
     window.attrset(ColorPair(0));
     window.printw(" ");
     window.attrset(ColorPair(6));
@@ -259,7 +271,7 @@ fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32
     window.attrset(ColorPair(1));
   }
   if offset <= 3 {
-    window.mvaddstr(3-offset,60,&format!("Flags: Ox{:04X}",info.flags));
+    window.mvaddstr(3-offset,60,&format!("Flags: 0x{:04X}",info.flags));
     window.attrset(ColorPair(0));
     window.printw(" ");
     window.attrset(ColorPair(2));
@@ -288,9 +300,10 @@ fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32
   }
   
   window.attrset(ColorPair(0));
+  
   if info.shst.offset != 0{
     for i in info.shst.offset/16..((info.shst.offset+info.shst.size)/16+1){
-      if i as i32 >= offset && (i as i32) < window.get_max_y()-1 {
+      if i as i32 >= offset && (i as i32) - offset < window.get_max_y()-1 {
         window.mvaddstr(i as i32 - offset,60,"|");
         for k in 0..16 {
           let index = (k+i*16) as usize;
@@ -319,25 +332,25 @@ fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32
       window.attrset(ColorPair(0));
       window.printw(" ");
       window.attrset(ColorPair(4));
-      window.printw(&format!("Offset: Ox{:08X}",head.offset));
+      window.printw(&format!("Offset: 0x{:08X}",head.offset));
     }
     
     if base+1 >= 0 && base+1 < window.get_max_y()-1{
       window.attrset(ColorPair(5));
-      window.mvaddstr(base+1,60,&format!("Virt Addr: Ox{:08X}",head.virt_addr));
+      window.mvaddstr(base+1,60,&format!("Virt Addr: 0x{:08X}",head.virt_addr));
       window.attrset(ColorPair(0));
       window.printw(" ");
       window.attrset(ColorPair(6));
-      window.printw(&format!("Size in file: Ox{:08X}",head.file_size));
+      window.printw(&format!("Size in file: 0x{:08X}",head.file_size));
     }
     
     if base+2 >= 0 && base+2 < window.get_max_y()-1{
       window.attrset(ColorPair(1));
-      window.mvaddstr(base+2,60,&format!("Size in mem: Ox{:08X}",head.mem_size));
+      window.mvaddstr(base+2,60,&format!("Size in mem: 0x{:08X}",head.mem_size));
       window.attrset(ColorPair(0));
       window.printw(" ");
       window.attrset(ColorPair(3));
-      window.printw(&format!("alignment: Ox{:08X}",head.align));
+      window.printw(&format!("alignment: 0x{:08X}",head.align));
     }
   }
   
@@ -364,16 +377,16 @@ fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32
     
     if base+1 >= 0 && base+1 < window.get_max_y()-1{
       window.attrset(ColorPair(4));
-      window.mvaddstr(base+1,60,&format!("Virt Addr: Ox{:08X}",head.virt_addr));
+      window.mvaddstr(base+1,60,&format!("Virt Addr: 0x{:08X}",head.virt_addr));
       window.attrset(ColorPair(0));
       window.printw(" ");
       window.attrset(ColorPair(5));
-      window.printw(&format!("Offset: Ox{:08X}",head.offset));
+      window.printw(&format!("Offset: 0x{:08X}",head.offset));
     }
     
     if base+2 >= 0 && base+2 < window.get_max_y()-1{
       window.attrset(ColorPair(6));
-      window.mvaddstr(base+2,60,&format!("Size in file: Ox{:08X}",head.file_size));
+      window.mvaddstr(base+2,60,&format!("Size in file: 0x{:08X}",head.file_size));
       window.attrset(ColorPair(0));
       window.printw(" ");
       window.attrset(ColorPair(1));
@@ -381,26 +394,26 @@ fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32
       window.attrset(ColorPair(0));
       window.printw(" ");
       window.attrset(ColorPair(2));
-      window.printw(&format!("Extra info: Ox{:04X}",head.extra_info));
+      window.printw(&format!("Extra info: 0x{:04X}",head.extra_info));
     }
     
     if base+3 >= 0 && base+3 < window.get_max_y()-1{
       window.attrset(ColorPair(3));
-      window.mvaddstr(base+3,60,&format!("Alignment: Ox{:08X}",head.align));
+      window.mvaddstr(base+3,60,&format!("Alignment: 0x{:08X}",head.align));
       window.attrset(ColorPair(0));
       window.printw(" ");
       window.attrset(ColorPair(4));
-      window.printw(&format!("Entry size: Ox{:08X}",head.entry_size));
+      window.printw(&format!("Entry size: 0x{:08X}",head.entry_size));
     }
   }
   window.attrset(ColorPair(0));
   
-  window.mvaddstr(window.get_max_y()-1,0,"                                                          ");
-  window.mvaddstr(window.get_max_y()-1,0,info.msg);
+  window.mvaddstr(window.get_max_y()-1,0,&info.msg);
+  window.clrtoeol();
   
 }
 
-struct ELFinfo<'a> {
+struct ELFinfo {
   bit_class: u8,
   endianess: u8,
   version: u8,
@@ -420,7 +433,7 @@ struct ELFinfo<'a> {
   progs:Vec<ProgHead>,
   sects:Vec<SectHead>,
   shst:STRTAB,
-  msg:&'a str
+  msg:String
 }
 struct STRTAB {
   offset: u64,
@@ -437,6 +450,7 @@ struct ProgHead {
 	align: u64
 }
 
+#[derive(Debug)]
 struct SectHead {
   name: u32,
   typ: u32,
