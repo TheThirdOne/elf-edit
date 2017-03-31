@@ -157,7 +157,7 @@ fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
               sect_size:get_multibyte_data(&buffer[58..60],buffer[5]==1) as u16,
               sect_num:get_multibyte_data(&buffer[60..62],buffer[5]==1) as u16,
               shs_table_index:get_multibyte_data(&buffer[62..64],buffer[5]==1) as u16,
-              progs:Vec::new(),sects:Vec::new(),shst:STRTAB{offset:0,size:0},
+              progs:Vec::new(),sects:Vec::new(),shstr:STRTAB{offset:0,size:0},strtabs:Vec::new(),
               msg:"".to_owned()
   };
   if tmp.prog_head == 0 && tmp.prog_num != 0 {
@@ -190,6 +190,7 @@ fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
   for i in 0..tmp.sect_num {
     let offset = (tmp.sect_head+(tmp.sect_size as u64)*(i as u64)) as usize;
     tmp.sects.push(SectHead{name:get_multibyte_data(&buffer[offset..(offset+4)],tmp.endianess==1) as u32,
+                            name_str:"".to_owned(),
              typ:get_multibyte_data(&buffer[(offset+4)..(offset+8)],tmp.endianess==1) as u32,
              flags:get_multibyte_data(&buffer[(offset+8)..(offset+16)],tmp.endianess==1),
              virt_addr:get_multibyte_data(&buffer[(offset+16)..(offset+24)],tmp.endianess==1),
@@ -202,17 +203,32 @@ fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
     });
   }
   if (tmp.shs_table_index as usize) < tmp.sects.len(){
-    let shs_head = &tmp.sects[tmp.shs_table_index as usize];
-    if shs_head.typ == 3 {
-      if shs_head.offset > buffer.len() as u64 || shs_head.offset + shs_head.file_size > buffer.len() as u64 {
+    let i = tmp.shs_table_index as usize;
+    if tmp.sects[i].typ == 3 {
+      if tmp.sects[i].offset > buffer.len() as u64 || tmp.sects[i].offset + tmp.sects[i].file_size > buffer.len() as u64 {
         tmp.msg = "String table section not within file".to_owned();
+        return tmp;
       }
-      tmp.shst.offset = shs_head.offset;
-      tmp.shst.size = shs_head.file_size;
+      tmp.shstr.offset = tmp.sects[i].offset;
+      tmp.shstr.size = tmp.sects[i].file_size;
     } else {
       tmp.msg = "String table section header corrupted".to_owned();
+      return tmp;
     }
   }
+  
+  let data = &buffer[(tmp.shstr.offset as usize)..((tmp.shstr.offset+tmp.shstr.size) as usize)];
+  for sect in &mut tmp.sects {
+    sect.name_str = get_null_string(data,sect.name as usize);
+    if sect.typ == 3 {
+      if sect.offset <= 0 || sect.offset > buffer.len() as u64 || sect.offset + sect.file_size > buffer.len() as u64 {
+        tmp.msg = "String table section not within file".to_owned();
+      } else {
+        tmp.strtabs.push(STRTAB{offset:sect.offset,size:sect.file_size});
+      }
+    }
+  }
+  
   return tmp;
 }
 
@@ -228,6 +244,15 @@ fn get_multibyte_data(data: &[u8], little_endian: bool) -> u64{
     }
   }
   return sum;
+}
+
+fn get_null_string(data: &[u8],mut i: usize) -> String{
+  let mut tmp = "".to_owned();
+  while i >= 0 && i < data.len() && data[i] != 0 {
+    tmp.push(data[i] as char);
+    i += 1;
+  }
+  return tmp;
 }
 
 fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32){
@@ -295,14 +320,14 @@ fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32
     window.attrset(ColorPair(0));
     window.printw(" ");
     window.attrset(ColorPair(1));
-    window.printw(&format!("shsti: {} ",info.shs_table_index));
+    window.printw(&format!("shstri: {} ",info.shs_table_index));
     window.attrset(ColorPair(0));
   }
   
   window.attrset(ColorPair(0));
   
-  if info.shst.offset != 0{
-    for i in info.shst.offset/16..((info.shst.offset+info.shst.size)/16+1){
+  for tab in &info.strtabs {
+    for i in tab.offset/16..((tab.offset+tab.size)/16+1){
       if i as i32 >= offset && (i as i32) - offset < window.get_max_y()-1 {
         window.mvaddstr(i as i32 - offset,60,"|");
         for k in 0..16 {
@@ -313,6 +338,7 @@ fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32
       }
     }
   }
+  
   
   
   for i in 0..(info.progs.len() as i32){
@@ -360,7 +386,7 @@ fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32
     
     if base >= 0 && base < window.get_max_y()-1{
       window.attrset(ColorPair(1));
-      window.mvaddstr(base,60,&format!("Name index: {}", head.name));
+      window.mvaddstr(base,60,&format!("Name: {} ({})", &head.name_str, head.name));
       window.attrset(ColorPair(0));
       window.printw(" ");
       window.attrset(ColorPair(2));
@@ -432,7 +458,8 @@ struct ELFinfo {
   shs_table_index:u16,
   progs:Vec<ProgHead>,
   sects:Vec<SectHead>,
-  shst:STRTAB,
+  shstr:STRTAB,
+  strtabs:Vec<STRTAB>,
   msg:String
 }
 struct STRTAB {
@@ -453,6 +480,7 @@ struct ProgHead {
 #[derive(Debug)]
 struct SectHead {
   name: u32,
+  name_str: String,
   typ: u32,
   flags: u64,
   virt_addr: u64,
