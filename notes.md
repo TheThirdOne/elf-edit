@@ -5,7 +5,6 @@ Resources on ELF:
     - Good high level overview / motivation explaner
   - [Overview of ELF and how to inspect it using tools](https://linux-audit.com/elf-binaries-on-linux-understanding-and-analysis/)
   - [Overview of basic format](https://en.wikipedia.org/wiki/Executable_and_Linkable_Format)
-    - Missing 64 bit program section format
   - [Spec for 64 bit](https://www.uclibc.org/docs/elf-64-gen.pdf)
     - has 64 bit program section format
   - [Full spec](http://docs.oracle.com/cd/E23824_01/pdf/819-0690.pdf)
