@@ -53,10 +53,10 @@ fn main() {
   }
   endwin();
 }
-trait setat {
+trait SetAt {
   fn set_at(&mut self,u8,&mut Cursor);
 }
-impl setat for Vec<u8> {
+impl SetAt for Vec<u8> {
   fn set_at(&mut self, val: u8, cursor: &mut Cursor){
     if cursor.index == cursor.length-1 {
       self.push(val*16); // move into the upper half of the new byte
@@ -145,7 +145,7 @@ fn render(window: &Window, buffer: &Vec<u8>, table: &ELFinfo, cursor:&Cursor){
 
 fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
   let mut tmp = ELFinfo{bit_class:buffer[4],endianess:buffer[5],version:buffer[6],abi:buffer[7],
-         file_type:get_multibyte_data(&buffer[16..18],buffer[5]==1) as u16,
+              file_type:get_multibyte_data(&buffer[16..18],buffer[5]==1) as u16,
               arch:get_multibyte_data(&buffer[18..20],buffer[5]==1) as u16,
               entry:get_multibyte_data(&buffer[24..32],buffer[5]==1),
               prog_head:get_multibyte_data(&buffer[32..40],buffer[5]==1),
@@ -157,7 +157,8 @@ fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
               sect_size:get_multibyte_data(&buffer[58..60],buffer[5]==1) as u16,
               sect_num:get_multibyte_data(&buffer[60..62],buffer[5]==1) as u16,
               shs_table_index:get_multibyte_data(&buffer[62..64],buffer[5]==1) as u16,
-              progs:Vec::new(),sects:Vec::new(),shstr:STRTAB{offset:0,size:0},strtabs:Vec::new(),
+              symtab: SYMTAB {offset:0,size:0,entry_size:0,link:0,ei:0},
+              progs:Vec::new(),sects:Vec::new(),shstr:STRTAB{offset:0,size:0},strtabs:Vec::new(),symbols:Vec::new(),
               msg:"".to_owned()
   };
   if tmp.prog_head == 0 && tmp.prog_num != 0 {
@@ -216,19 +217,36 @@ fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
       return tmp;
     }
   }
-  
-  let data = &buffer[(tmp.shstr.offset as usize)..((tmp.shstr.offset+tmp.shstr.size) as usize)];
   for sect in &mut tmp.sects {
-    sect.name_str = get_null_string(data,sect.name as usize);
-    if sect.typ == 3 {
+    sect.name_str = get_null_string(&buffer[(tmp.shstr.offset as usize)..((tmp.shstr.offset+tmp.shstr.size) as usize)],sect.name as usize);
+    if sect.typ == 3 { //String table
       if sect.offset <= 0 || sect.offset > buffer.len() as u64 || sect.offset + sect.file_size > buffer.len() as u64 {
         tmp.msg = "String table section not within file".to_owned();
       } else {
         tmp.strtabs.push(STRTAB{offset:sect.offset,size:sect.file_size});
       }
+    }else if sect.typ == 2 {
+      tmp.symtab.offset = sect.offset;
+      tmp.symtab.size = sect.file_size;
+      tmp.symtab.entry_size = sect.entry_size;
+      tmp.symtab.link = sect.sect_index;
+      tmp.symtab.ei = sect.extra_info;
     }
   }
-  
+  if tmp.symtab.offset + tmp.symtab.size < buffer.len() as u64 && tmp.symtab.entry_size != 0{
+    let strtab = &tmp.sects[tmp.symtab.link as usize];
+    for i in 0..(tmp.symtab.size/tmp.symtab.entry_size){
+      let offset = (tmp.symtab.offset+(tmp.symtab.entry_size as u64)*(i as u64)) as usize;
+      let mut sym = SYMBOL{name:get_multibyte_data(&buffer[offset..(offset+4)],tmp.endianess==1) as u32,
+               name_str:"".to_owned(),
+               info:buffer[offset+4],other:buffer[offset+5],
+               shndx:get_multibyte_data(&buffer[(offset+6)..(offset+8)],tmp.endianess==1) as u16,
+               value:get_multibyte_data(&buffer[(offset+8)..(offset+16)],tmp.endianess==1) as u64,
+               size:get_multibyte_data(&buffer[(offset+16)..(offset+24)],tmp.endianess==1) as u64};
+      sym.name_str = get_null_string(&buffer[(strtab.offset as usize)..((strtab.offset+strtab.file_size) as usize)],sym.name as usize);
+      tmp.symbols.push(sym);
+    }
+  }
   return tmp;
 }
 
@@ -248,7 +266,7 @@ fn get_multibyte_data(data: &[u8], little_endian: bool) -> u64{
 
 fn get_null_string(data: &[u8],mut i: usize) -> String{
   let mut tmp = "".to_owned();
-  while i >= 0 && i < data.len() && data[i] != 0 {
+  while i < data.len() && data[i] != 0 && i < data.len(){
     tmp.push(data[i] as char);
     i += 1;
   }
@@ -338,8 +356,6 @@ fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32
       }
     }
   }
-  
-  
   
   for i in 0..(info.progs.len() as i32){
     let head = &info.progs[i as usize];
@@ -432,6 +448,44 @@ fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32
       window.printw(&format!("Entry size: 0x{:08X}",head.entry_size));
     }
   }
+  
+  for i in 0..(info.symbols.len() as i32){
+    let head = &info.symbols[i as usize];
+    let base = ((info.symtab.offset+((i as u64)*(info.symtab.entry_size as u64)))/16) as i32 - offset;
+    
+    if base >= 0 && base < window.get_max_y()-1{
+      window.attrset(ColorPair(1));
+      window.mvaddstr(base,60,&format!("Name: {} ({})", &head.name_str, head.name));
+      window.attrset(ColorPair(0));
+      window.printw(" ");
+      window.attrset(ColorPair(2));
+      window.printw(&format!("Bind: {}, Type: {}",match head.info >> 4 {0=>"Local",1=>"Global",2=>"Weak",10=>"LOOS",12=>"HIOS",13=>"LOPROC",15=>"HIPROC",_=>"Unknown type"},
+      match head.info & 0xf {0=>"No Type",1=>"Object",2=>"Func",3=>"Section",4=>"File",5=>"Common",6=>"TLS",10=>"LOOS",12=>"HIOS",13=>"LOPROC",14=>"Spark Register",15=>"HIPROC",_=>"Unknown type"}));
+      window.attrset(ColorPair(0));
+      window.printw(" ");
+      window.attrset(ColorPair(3));
+      window.printw(&format!("Visibility: {}",match head.other & 0x3 {0=>"Default",1=>"Internal",2=>"Hidden",3=>"Protected",4=>"Exported",5=>"Singleton",6=>"Eliminate",_=>"Unknown visbility"}));
+      window.attrset(ColorPair(0));
+      window.printw(" ");
+      window.attrset(ColorPair(4));
+      let str = match head.shndx {0=>"Undef",0xff00=>"LOPROC",0xff01=>"After",0xff1f=>"HIPROC",0xff20=>"LOOS",0xff3f=>"HIOS",
+                                  0xfff1=>"ABS",0xfff2=>"Common",0xffff=>"HIReserve", _=>""};
+      if str == ""{
+        window.printw(&format!("Shndx: {}",head.shndx));
+      }else{
+        window.printw(&format!("Shndx: {}",str));
+      }
+      window.attrset(ColorPair(0));
+      window.printw(" ");
+      window.attrset(ColorPair(5));
+      window.printw(&format!("Value: 0x{:04X}",head.value));
+      window.attrset(ColorPair(0));
+      window.printw(" ");
+      window.attrset(ColorPair(6));
+      window.printw(&format!("Size: 0x{:04X}",head.size));
+    }
+  }
+  
   window.attrset(ColorPair(0));
   
   window.mvaddstr(window.get_max_y()-1,0,&info.msg);
@@ -460,11 +514,31 @@ struct ELFinfo {
   sects:Vec<SectHead>,
   shstr:STRTAB,
   strtabs:Vec<STRTAB>,
+  symtab: SYMTAB,
+  symbols:Vec<SYMBOL>,
   msg:String
 }
 struct STRTAB {
   offset: u64,
   size: u64
+}
+
+struct SYMTAB {
+  offset: u64,
+  size:   u64,
+  entry_size: u64,
+  link: u32,
+  ei:   u32
+}
+
+struct SYMBOL {
+  name:  u32,
+  name_str:String,
+  info:  u8,
+  other: u8, //used for visibility
+  shndx: u16,
+  value: u64,
+  size:  u64
 }
 
 struct ProgHead {
@@ -477,7 +551,6 @@ struct ProgHead {
 	align: u64
 }
 
-#[derive(Debug)]
 struct SectHead {
   name: u32,
   name_str: String,
@@ -512,7 +585,7 @@ fn highlight(index: usize, info: &ELFinfo) -> u8{
 	if index <= 59 {return 5} // Size of Section headers
 	if index <= 61 {return 6} // Number of Section headers
 	if index <= 63 {return 1} // Section header string table index
-  for i in 0..info.prog_num {
+  for i in 0..info.progs.len() {
     if index < (info.prog_head + (i as u64)*(info.prog_size as u64)) as usize {continue;}
     if index > (info.prog_head + ((i as u64)+1)*(info.prog_size as u64)) as usize{continue;}
     let offset = (index as u64) - info.prog_head - (i as u64)*(info.prog_size as u64);
@@ -525,7 +598,7 @@ fn highlight(index: usize, info: &ELFinfo) -> u8{
     if offset < 48 {return 1} // Size in Mem
     if offset < 56 {return 3} // Required alignment
   }
-  for i in 0..info.sect_num {
+  for i in 0..info.sects.len() {
     if index < (info.sect_head + (i as u64)*(info.sect_size as u64)) as usize {continue;}
     if index > (info.sect_head + ((i as u64)+1)*(info.sect_size as u64)) as usize{continue;}
     let offset = (index as u64) - info.sect_head - (i as u64)*(info.sect_size as u64);
@@ -540,6 +613,16 @@ fn highlight(index: usize, info: &ELFinfo) -> u8{
     if offset < 56 {return 3} // Required alignment
     if offset < 64 {return 4} // Entry size
   }
+  for i in 0..info.symbols.len() {
+    if index < (info.symtab.offset + (i as u64)*(info.symtab.entry_size as u64)) as usize {continue;}
+    if index > (info.symtab.offset + (i as u64+1)*(info.symtab.entry_size as u64)) as usize{continue;}
+    let offset = (index as u64) - info.symtab.offset - (i as u64)*(info.symtab.entry_size as u64);
+    if offset < 4  {return 1} // Name
+    if offset < 5  {return 2} // Info
+    if offset < 6  {return 3} // Other / Visibility
+    if offset < 8  {return 4} // Section index
+    if offset < 16 {return 5} // Value
+    if offset < 24 {return 6} // Size
+  }
 	return 0;
 }
-
