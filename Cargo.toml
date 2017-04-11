@@ -1,0 +1,7 @@
+[package]
+name = "elfedit"
+version = "0.1.0"
+authors = ["root"]
+
+[dependencies]
+pancurses = "0.8.0"
