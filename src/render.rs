@@ -214,8 +214,27 @@ pub fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset:
     }
   }
   
+  for tab in &info.reltabs{
+    for i in 0..tab.rels.len(){
+      let base = ((tab.offset + (i as u64)*(tab.entry_size as u64))/16) as i32 - offset;
+      if base >= 0 && base < window.get_max_y()-1{
+        window.attrset(ColorPair(1));
+        window.mvaddstr(base,60,&format!("Offset: 0x{:04x}", tab.rels[i].offset));
+        window.attrset(ColorPair(0));
+        window.printw(" ");
+        window.attrset(ColorPair(2));
+        window.printw(&format!("Info: 0x{:08x}", tab.rels[i].info));
+        window.attrset(ColorPair(0));
+        window.printw(" ");
+        window.attrset(ColorPair(3));
+        window.printw(&format!("Addend: {}", tab.rels[i].addend));
+      }
+    }
+  }
+  
   window.attrset(ColorPair(0));
   
   window.mvaddstr(window.get_max_y()-1,0,&info.msg);
   window.clrtoeol();
 }
+

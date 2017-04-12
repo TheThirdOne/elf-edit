@@ -1,3 +1,4 @@
+
 pub struct ELFinfo {
   pub bit_class: u8,
   pub endianess: u8,
@@ -21,6 +22,7 @@ pub struct ELFinfo {
   pub strtabs:Vec<STRTAB>,
   pub symtab: SYMTAB,
   pub symbols:Vec<SYMBOL>,
+  pub reltabs: Vec<RELTAB>,
   pub msg:String
 }
 pub struct STRTAB {
@@ -44,6 +46,21 @@ pub struct SYMBOL {
   pub shndx: u16,
   pub value: u64,
   pub size:  u64
+}
+
+pub struct RELTAB {
+  pub offset: u64,
+  pub size:   u64,
+  pub entry_size: u64,
+  pub link: u32,
+  pub ei:   u32,
+  pub rels: Vec<REL>
+}
+
+pub struct REL {
+  pub offset: u64,
+  pub info: u64,
+  pub addend: i64
 }
 
 pub struct ProgHead {

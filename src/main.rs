@@ -98,7 +98,7 @@ fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
               sect_num:get_multibyte_data(&buffer[60..62],buffer[5]==1) as u16,
               shs_table_index:get_multibyte_data(&buffer[62..64],buffer[5]==1) as u16,
               symtab: SYMTAB {offset:0,size:0,entry_size:0,link:0,ei:0},
-              progs:Vec::new(),sects:Vec::new(),shstr:STRTAB{offset:0,size:0},strtabs:Vec::new(),symbols:Vec::new(),
+              progs:Vec::new(),sects:Vec::new(),shstr:STRTAB{offset:0,size:0},strtabs:Vec::new(),symbols:Vec::new(),reltabs:Vec::new(),
               msg:"".to_owned()
   };
   if tmp.prog_head == 0 && tmp.prog_num != 0 {
@@ -171,8 +171,22 @@ fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
       tmp.symtab.entry_size = sect.entry_size;
       tmp.symtab.link = sect.sect_index;
       tmp.symtab.ei = sect.extra_info;
+    } else if sect.typ == 4 {
+      tmp.reltabs.push(RELTAB{offset:sect.offset,size:sect.file_size,entry_size:sect.entry_size,link:sect.sect_index,ei:sect.extra_info,rels:Vec::new()})
     }
   }
+  
+  for tab in &mut tmp.reltabs {
+    if tab.offset + tab.size <= buffer.len() as u64 && tab.entry_size != 0 {
+      for i in 0..(tab.size/tab.entry_size){
+        let offset = ( tab.offset+(tab.entry_size as u64)*(i as u64)) as usize;
+        tab.rels.push(REL{offset:get_multibyte_data(&buffer[offset..(offset+8)],tmp.endianess==1) as u64,
+                 info:get_multibyte_data(&buffer[(offset+8)..(offset+16)],tmp.endianess==1) as u64,
+                 addend:get_multibyte_data(&buffer[(offset+16)..(offset+24)],tmp.endianess==1) as i64});
+      }
+    }
+  }
+  
   if tmp.symtab.offset + tmp.symtab.size < buffer.len() as u64 && tmp.symtab.entry_size != 0{
     let strtab = &tmp.sects[tmp.symtab.link as usize];
     for i in 0..(tmp.symtab.size/tmp.symtab.entry_size){
@@ -248,6 +262,16 @@ fn highlight(index: usize, info: &ELFinfo) -> u8{
     if offset < 8  {return 4} // Section index
     if offset < 16 {return 5} // Value
     if offset < 24 {return 6} // Size
+  }
+  for tab in &info.reltabs{
+    for i in 0..tab.rels.len(){
+      if index < (tab.offset + (i as u64)*(tab.entry_size as u64)) as usize {continue;}
+      if index > (tab.offset + (i as u64+1)*(tab.entry_size as u64)) as usize{continue;}
+      let offset = (index as u64) - tab.offset - (i as u64)*(tab.entry_size as u64);
+      if offset < 8  {return 1} // Offset
+      if offset < 16 {return 2} // Info
+      if offset < 24 {return 3} // Addend
+    }
   }
 	return 0;
 }
