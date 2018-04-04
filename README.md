@@ -7,7 +7,7 @@ A simple hex editing tool with highlighting and human readable form on the sideb
 
 If you trust me you can get a Linux binary from the [releases](https://github.com/TheThirdOne/elf-edit/releases).
 
-## Istallation
+## Installation
 
 Before attempting to install this, you'll need to have cargo and rust installed, but with that done, it should be a simple install.
 
