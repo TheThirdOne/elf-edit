@@ -30,7 +30,22 @@ fn main() {
 	
   
   let mut buffer = Vec::new();
-  let size = File::open(env::args().nth(1).unwrap()).unwrap().read_to_end(&mut buffer);
+  let name = match env::args().nth(1) {
+               Some(n)=>n,
+               None => {
+                  endwin();
+                  println!("Usage: elfedit exec.o");
+                  return;
+                }
+             };
+  let _size = match File::open(name){
+               Ok(f)=>f,
+               Err(e)=>{
+                 endwin();
+                 println!("File couldn't be opened: {}", e);
+                 return
+               }
+      }.read_to_end(&mut buffer);
   let mut info = get_elf_info(&buffer);
   
   let mut cursor = Cursor{index:0,length:buffer.len()*2+1,offset:0};
