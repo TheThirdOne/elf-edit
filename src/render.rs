@@ -222,12 +222,33 @@ pub fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset:
         window.mvaddstr(base,60,&format!("Offset: 0x{:04x}", tab.rels[i].offset));
         window.attrset(ColorPair(0));
         window.printw(" ");
-        window.attrset(ColorPair(2));
-        window.printw(&format!("Info: 0x{:08x}", tab.rels[i].info));
-        window.attrset(ColorPair(0));
-        window.printw(" ");
-        window.attrset(ColorPair(3));
-        window.printw(&format!("Addend: {}", tab.rels[i].addend));
+        if info.arch == 0x3E {
+          window.attrset(ColorPair(2));
+          window.printw(&format!("Symbol index: 0x{:04x}", tab.rels[i].info >> 32));
+          window.attrset(ColorPair(0));
+          window.printw(" ");
+          window.attrset(ColorPair(4));
+          let str = match tab.rels[i].info & 0xffffffff {
+            0=>"NONE",1=>"64",2=>"PC32",3=>"GOT32",4=>"PLT32",5=>"COPY",
+            6=>"GLOB_DAT", 7=>"JUMP_SLOT", 8=>"RELATIVE", 9=>"GOTPCREL", _=>"",
+          };
+          if str == ""{
+            window.printw(&format!("Type: {}",tab.rels[i].info & 0xffffffff));
+          }else{
+            window.printw(&format!("Type: R_X86_64_{}",str));
+          }
+          window.attrset(ColorPair(0));
+          window.printw(" ");
+          window.attrset(ColorPair(3));
+          window.printw(&format!("Addend: {}", tab.rels[i].addend));
+        } else {
+          window.attrset(ColorPair(2));
+          window.printw(&format!("Info: 0x{:08x}", tab.rels[i].info));
+          window.attrset(ColorPair(0));
+          window.printw(" ");
+          window.attrset(ColorPair(3));
+          window.printw(&format!("Addend: {}", tab.rels[i].addend));
+        }
       }
     }
   }

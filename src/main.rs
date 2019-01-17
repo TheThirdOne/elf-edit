@@ -161,8 +161,11 @@ fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
   if (tmp.shs_table_index as usize) < tmp.sects.len(){
     let i = tmp.shs_table_index as usize;
     if tmp.sects[i].typ == 3 {
-      if tmp.sects[i].offset > buffer.len() as u64 || tmp.sects[i].offset + tmp.sects[i].file_size > buffer.len() as u64 {
+      if tmp.sects[i].offset > buffer.len() as u64 {
         tmp.msg = "String table section not within file".to_owned();
+        return tmp;
+      } else if tmp.sects[i].offset > buffer.len() as u64 {
+        tmp.msg = "String table not entirely within file".to_owned();
         return tmp;
       }
       tmp.shstr.offset = tmp.sects[i].offset;
@@ -284,7 +287,12 @@ fn highlight(index: usize, info: &ELFinfo) -> u8{
       if index > (tab.offset + (i as u64+1)*(tab.entry_size as u64)) as usize{continue;}
       let offset = (index as u64) - tab.offset - (i as u64)*(tab.entry_size as u64);
       if offset < 8  {return 1} // Offset
-      if offset < 16 {return 2} // Info
+      if info.arch == 0x3E {
+        if offset < 12 {return 2} // Symbol index
+        if offset < 16 {return 4} // Type
+      } else {
+        if offset < 16 {return 2} // Info
+      } 
       if offset < 24 {return 3} // Addend
     }
   }
