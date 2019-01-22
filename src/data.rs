@@ -23,7 +23,8 @@ pub struct ELFinfo {
   pub symtab: SYMTAB,
   pub symbols:Vec<SYMBOL>,
   pub reltabs: Vec<RELTAB>,
-  pub msg:String
+  pub msg:String,
+  pub needs_redraw: bool,
 }
 pub struct STRTAB {
   pub offset: u64,

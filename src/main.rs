@@ -52,11 +52,13 @@ fn main() {
 
   loop {
     if cursor.update_offset((window.get_max_y()-2) as usize) {
-      window.clear();
+      window.clear(); // maybe try something more exact than this (using insertln and deleteln)
+      info.needs_redraw = true;
     }
     render(&window,&buffer,&info,&cursor);
 
     window.refresh();
+    info.needs_redraw = false;
     match window.getch() {
       Some(Input::Character('j'))=>{cursor.mv(0,-1);},
       Some(Input::KeyUp)         =>{cursor.mv(0,-1);},
@@ -70,31 +72,32 @@ fn main() {
       Some(Input::Character(other)) if other >= 'a' && other <= 'f' => {buffer.set_at((other as u8) -('a' as u8)+10,&mut cursor); info = get_elf_info(&buffer);},
       Some(Input::Character('\u{1b}')) => break,
       Some(other)=>{info.msg = format!("Unused keypress: {:?}",other);},
-      None => ()
-    }
+      None => (),
+    };
   }
   endwin();
 }
 
 fn render(window: &Window, buffer: &Vec<u8>, table: &ELFinfo, cursor:&Cursor){
   window.mv(0,0);
-  for row in cursor.offset..cmp::min(buffer.len()/16+1,cursor.offset+(window.get_max_y()-1) as usize){
-    window.printw(&format!("{:08X}: ",row*16));
-    for i in 0..16 {
-      if row*16+i >= buffer.len() {continue;}
-      if i == 8 {window.printw(" ");}
-      window.attrset(ColorPair(highlight(16*row+i,&table)));
-      window.printw(&format!("{:02X}",buffer[row*16+i]));
-      if highlight(16*row+i,&table) != highlight(16*row+i+1,&table) || i == 15 {
-        window.attrset(ColorPair(0));
+  if table.needs_redraw {
+    for row in cursor.offset..cmp::min(buffer.len()/16+1,cursor.offset+(window.get_max_y()-1) as usize){
+        window.printw(&format!("{:08X}: ",row*16));
+        for i in 0..16 {
+          if row*16+i >= buffer.len() {continue;}
+          if i == 8 {window.printw(" ");}
+          window.attrset(ColorPair(highlight(16*row+i,&table)));
+          window.printw(&format!("{:02X}",buffer[row*16+i]));
+          if highlight(16*row+i,&table) != highlight(16*row+i+1,&table) || i == 15 {
+            window.attrset(ColorPair(0));
+          }
+          window.printw(" ");
+        }
+        window.printw("\n");
       }
-      window.printw(" ");
-    }
-    window.printw("\n");
-  }
 
-  print_elf_info(window,&table,&buffer,cursor.offset as i32);
-  
+      print_elf_info(window,&table,&buffer,cursor.offset as i32);
+  }
   window.mv((cursor.y()-cursor.offset) as i32,cursor.x() as i32);
 }
 
@@ -114,7 +117,7 @@ fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
               shs_table_index:get_multibyte_data(&buffer[62..64],buffer[5]==1) as u16,
               symtab: SYMTAB {offset:0,size:0,entry_size:0,link:0,ei:0},
               progs:Vec::new(),sects:Vec::new(),shstr:STRTAB{offset:0,size:0},strtabs:Vec::new(),symbols:Vec::new(),reltabs:Vec::new(),
-              msg:"".to_owned()
+              msg:"".to_owned(),needs_redraw:true,
   };
   if tmp.prog_head == 0 && tmp.prog_num != 0 {
     tmp.msg = "Program headers offset = 0, but there are program headers".to_owned();
