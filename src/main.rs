@@ -178,6 +178,15 @@ fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
       return tmp;
     }
   }
+  for prog in &mut tmp.progs {
+    if prog.typ == 3 { //Interp
+      if prog.offset <= 0 || prog.offset > buffer.len() as u64 || prog.offset + prog.file_size > buffer.len() as u64 {
+        tmp.msg = "String for INTERP not within file".to_owned();
+      } else {
+        tmp.strtabs.push(STRTAB{offset:prog.offset,size:prog.file_size});
+      }
+    }
+  }
   for sect in &mut tmp.sects {
     sect.name_str = get_null_string(&buffer[(tmp.shstr.offset as usize)..((tmp.shstr.offset+tmp.shstr.size) as usize)],sect.name as usize);
     if sect.typ == 3 { //String table
