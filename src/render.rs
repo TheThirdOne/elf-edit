@@ -91,8 +91,8 @@ pub fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset:
     
     if base >= 0 && base < window.get_max_y()-1{
       window.attrset(ColorPair(2));
-      window.mvaddstr(base,60,match head.typ {0=>"Null",1=>"Load", 2=>"Dynamic",3=>"Interp",4=>"Note",5=>"SHLIB",
-                      6=>"PHDR",0x60000000=>"LOOS",0x6FFFFFFF=>"HIOS",0x70000000=>"LOPROC",0x7FFFFFFF=>"HIPROC", _=>"Unknown type"});
+      window.mvaddstr(base,60,match head.typ {0=>"Null",1=>"Load", 2=>"Dynamic",3=>"Interp",4=>"Note",5=>"SHLIB",6=>"PHDR",7=>"TLS",
+                        0x60000000..=0x6FFFFFFF=>"OS Specific",0x70000000..=0x7FFFFFFF=>"Proccesor specific", _=>"Unknown type"});
       window.attrset(ColorPair(0));
       window.printw(" ");
       window.attrset(ColorPair(3));
@@ -135,8 +135,9 @@ pub fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset:
       window.printw(" ");
       window.attrset(ColorPair(2));
       window.printw(match head.typ {0=>"NULL",1=>"PROGBITS", 2=>"SYMTAB",3=>"STRTAB",4=>"RELA",5=>"HASH",
-                          6=>"DYNAMIC",7=>"NOTE",8=>"NOBITS",9=>"REL",10=>"SHLIB",11=>"DYNSYM",0x60000000=>"LOOS",
-                          0x6FFFFFFF=>"HIOS",0x70000000=>"LOPROC",0x7FFFFFFF=>"HIPROC", _=>"Unknown type"});
+                          6=>"DYNAMIC",7=>"NOTE",8=>"NOBITS",9=>"REL",10=>"SHLIB",11=>"DYNSYM",
+                          0xE=>"INIT_ARRAY",0xF=>"FINI_ARRAY",0x10=>"PREINIT_ARRAY",0x11=>"GROUP",0x12=>"SYMTAB_SHNDX",0x13=>"NUM",
+                          0x60000000..=0x6FFFFFFF=>"OS Specific",0x70000000..=0x7FFFFFFF=>"Proccesor specific", _=>"Unknown type"});
       window.attrset(ColorPair(0));
       window.printw(" ");
       window.attrset(ColorPair(3));
