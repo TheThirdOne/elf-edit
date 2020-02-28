@@ -60,9 +60,9 @@ fn main() {
     window.refresh();
     info.needs_redraw = false;
     match window.getch() {
-      Some(Input::Character('j'))=>{cursor.mv(0,-1);},
+      Some(Input::Character('k'))=>{cursor.mv(0,-1);},
       Some(Input::KeyUp)         =>{cursor.mv(0,-1);},
-      Some(Input::Character('k'))=>{cursor.mv(0,1);},
+      Some(Input::Character('j'))=>{cursor.mv(0,1);},
       Some(Input::KeyDown)       =>{cursor.mv(0,1);},
       Some(Input::Character('h'))=>{cursor.mv(-1,0);},
       Some(Input::KeyLeft)       =>{cursor.mv(-1,0);},
