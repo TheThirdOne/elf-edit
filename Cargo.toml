@@ -1,7 +1,7 @@
 [package]
 name = "elfedit"
 version = "0.2.0"
-authors = ["root"]
+authors = ["TheThirdOne"]
 
 [dependencies]
 pancurses = "0.16.0"
