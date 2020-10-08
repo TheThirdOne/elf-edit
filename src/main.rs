@@ -68,8 +68,8 @@ fn main() {
       Some(Input::KeyLeft)       =>{cursor.mv(-1,0);},
       Some(Input::Character('l'))=>{cursor.mv(1,0);},
       Some(Input::KeyRight)      =>{cursor.mv(1,0);},
-      Some(Input::Character(other)) if other >= '0' && other <= '9' => {buffer.set_at((other as u8) -('0' as u8),&mut cursor); info = get_elf_info(&buffer);},
-      Some(Input::Character(other)) if other >= 'a' && other <= 'f' => {buffer.set_at((other as u8) -('a' as u8)+10,&mut cursor); info = get_elf_info(&buffer);},
+      Some(Input::Character(other)) if other >= '0' && other <= '9' => {buffer.set_at((other as u8) -b'0',&mut cursor); info = get_elf_info(&buffer);},
+      Some(Input::Character(other)) if other >= 'a' && other <= 'f' => {buffer.set_at((other as u8) -b'a'+10,&mut cursor); info = get_elf_info(&buffer);},
       Some(Input::Character('\u{1b}')) => break,
       Some(other)=>{info.msg = format!("Unused keypress: {:?}",other);},
       None => (),
@@ -78,7 +78,7 @@ fn main() {
   endwin();
 }
 
-fn render(window: &Window, buffer: &Vec<u8>, table: &ELFinfo, cursor:&Cursor){
+fn render(window: &Window, buffer: &[u8], table: &ELFinfo, cursor:&Cursor){
   window.mv(0,0);
   if table.needs_redraw {
     for row in cursor.offset..cmp::min(buffer.len()/16+1,cursor.offset+(window.get_max_y()-1) as usize){
@@ -96,12 +96,12 @@ fn render(window: &Window, buffer: &Vec<u8>, table: &ELFinfo, cursor:&Cursor){
         window.printw("\n");
       }
 
-      print_elf_info(window,&table,&buffer,cursor.offset as i32);
+      print_elf_info(window,&table,buffer,cursor.offset as i32);
   }
   window.mv((cursor.y()-cursor.offset) as i32,cursor.x() as i32);
 }
 
-fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
+fn get_elf_info(buffer: &[u8]) -> ELFinfo {
   let mut tmp = ELFinfo{bit_class:buffer[4],endianess:buffer[5],version:buffer[6],abi:buffer[7],
               file_type:get_multibyte_data(&buffer[16..18],buffer[5]==1) as u16,
               arch:get_multibyte_data(&buffer[18..20],buffer[5]==1) as u16,
@@ -231,7 +231,7 @@ fn get_elf_info(buffer: &Vec<u8>) -> ELFinfo {
       tmp.symbols.push(sym);
     }
   }
-  return tmp;
+  tmp
 }
 
 fn highlight(index: usize, info: &ELFinfo) -> u8{
@@ -302,11 +302,9 @@ fn highlight(index: usize, info: &ELFinfo) -> u8{
       if info.arch == 0x3E {
         if offset < 12 {return 2} // Symbol index
         if offset < 16 {return 4} // Type
-      } else {
-        if offset < 16 {return 2} // Info
-      } 
+      } else if offset < 16 {return 2} 
       if offset < 24 {return 3} // Addend
     }
   }
-	return 0;
+	0
 }

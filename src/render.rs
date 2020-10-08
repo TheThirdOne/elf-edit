@@ -1,7 +1,7 @@
 use pancurses::*;
 use data::*;
 
-pub fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &Vec<u8>, offset: i32){
+pub fn print_elf_info(window: &Window, info: &ELFinfo, buffer: &[u8], offset: i32){
   if offset == 0 {
     window.attrset(ColorPair(2));
     window.mvaddstr(0-offset,60,if info.bit_class == 1 {"32 bit"} else {"64 bit"});
