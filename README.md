@@ -1,9 +1,8 @@
-Elf Edit
-========
+# Elf Edit
 
 A simple hex editing tool with highlighting and human readable form on the sidebar for ELF (Executable and linking format) files.
 
-![Screenshot showing a tiny binary](screenshot.png)
+![Screenshot showing a tiny binary](./assets/screenshot.png)
 
 If you trust me you can get a Linux binary from the [releases](https://github.com/TheThirdOne/elf-edit/releases).
 
